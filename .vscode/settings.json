@@ -1,0 +1,10 @@
+{
+    "platformio-ide.useBuiltinPIOCore": true,
+    "platformio-ide.useDevelopmentPIOCore": false,
+    "C_Cpp.intelliSenseEngine": "Tag Parser",
+    "files.associations": {
+        "*.ino": "cpp"
+    },
+    "platformio-ide.autoRebuildAutocompleteIndex": true,
+    "platformio-ide.enableTelemetry": false
+}
