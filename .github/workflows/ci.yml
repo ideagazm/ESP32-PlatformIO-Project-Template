@@ -1,0 +1,334 @@
+name: ESP32 CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  PLATFORMIO_CORE_DIR: .platformio
+
+jobs:
+  # Code Quality and Linting
+  lint:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+
+      - name: Create virtual environment
+        run: |
+          python -m venv .venv
+          
+      - name: Activate venv and install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Activate venv and install dependencies (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run PlatformIO Check (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          pio check --verbose
+
+      - name: Run PlatformIO Check (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          source .venv/bin/activate
+          pio check --verbose
+
+      - name: Run Python linting (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          pip install flake8 black
+          flake8 scripts/ --max-line-length=100 --ignore=E203,W503
+          black --check scripts/
+
+      - name: Run Python linting (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          source .venv/bin/activate
+          pip install flake8 black
+          flake8 scripts/ --max-line-length=100 --ignore=E203,W503
+          black --check scripts/
+
+  # Build for multiple environments
+  build:
+    name: Build Firmware
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      matrix:
+        environment: [esp32dev, esp32dev_debug, esp32dev_ota]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+
+      - name: Create virtual environment and install dependencies
+        run: |
+          python -m venv .venv
+          
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Install dependencies (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build firmware (${{ matrix.environment }}) - Windows
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          pio run -e ${{ matrix.environment }}
+
+      - name: Build firmware (${{ matrix.environment }}) - Unix
+        if: runner.os != 'Windows'
+        run: |
+          source .venv/bin/activate
+          pio run -e ${{ matrix.environment }}
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-${{ matrix.environment }}
+          path: |
+            .pio/build/${{ matrix.environment }}/firmware.bin
+            .pio/build/${{ matrix.environment }}/firmware.elf
+            .pio/build/${{ matrix.environment }}/bootloader.bin
+            .pio/build/${{ matrix.environment }}/partitions.bin
+          retention-days: 30
+
+  # Security and dependency scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Documentation and project validation
+  validate:
+    name: Project Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Create virtual environment and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run project status check
+        run: |
+          source .venv/bin/activate
+          python scripts/project_status.py
+
+      - name: Validate documentation
+        run: |
+          # Check if README exists and has minimum content
+          if [ ! -f README.md ]; then
+            echo "README.md not found"
+            exit 1
+          fi
+          
+          # Check for required sections
+          grep -q "Quick Start" README.md || (echo "Missing Quick Start section" && exit 1)
+          grep -q "Development Commands" README.md || (echo "Missing Development Commands section" && exit 1)
+
+      - name: Check file structure
+        run: |
+          # Verify required files exist
+          test -f platformio.ini || (echo "platformio.ini missing" && exit 1)
+          test -f build.ps1 || (echo "build.ps1 missing" && exit 1)
+          test -d scripts || (echo "scripts directory missing" && exit 1)
+
+  # Release automation
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [lint, build, security, validate]
+    if: github.event_name == 'release'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Build all environments
+        run: |
+          pio run -e esp32dev
+          pio run -e esp32dev_debug
+          pio run -e esp32dev_ota
+
+      - name: Create release package
+        run: |
+          mkdir -p release
+          
+          # Copy firmware binaries
+          cp .pio/build/esp32dev/firmware.bin release/firmware-production.bin
+          cp .pio/build/esp32dev_debug/firmware.bin release/firmware-debug.bin
+          cp .pio/build/esp32dev_ota/firmware.bin release/firmware-ota.bin
+          
+          # Copy bootloader and partitions
+          cp .pio/build/esp32dev/bootloader.bin release/
+          cp .pio/build/esp32dev/partitions.bin release/
+          
+          # Create flash script
+          cat > release/flash.sh << 'EOF'
+          #!/bin/bash
+          # ESP32 Flash Script
+          echo "Flashing ESP32..."
+          esptool.py --chip esp32 --port ${1:-/dev/ttyUSB0} --baud 921600 write_flash \
+            0x1000 bootloader.bin \
+            0x8000 partitions.bin \
+            0x10000 firmware-production.bin
+          EOF
+          chmod +x release/flash.sh
+          
+          # Create Windows flash script
+          cat > release/flash.bat << 'EOF'
+          @echo off
+          echo Flashing ESP32...
+          esptool.py --chip esp32 --port %1 --baud 921600 write_flash ^
+            0x1000 bootloader.bin ^
+            0x8000 partitions.bin ^
+            0x10000 firmware-production.bin
+          EOF
+          
+          # Create README for release
+          cat > release/README.txt << 'EOF'
+          ESP32 Firmware Release Package
+          =============================
+          
+          Files included:
+          - firmware-production.bin: Optimized production firmware
+          - firmware-debug.bin: Debug version with verbose logging
+          - firmware-ota.bin: OTA-capable firmware
+          - bootloader.bin: ESP32 bootloader
+          - partitions.bin: Partition table
+          - flash.sh: Linux/Mac flash script
+          - flash.bat: Windows flash script
+          
+          Flashing Instructions:
+          1. Install esptool: pip install esptool
+          2. Connect ESP32 via USB
+          3. Put ESP32 in download mode (hold BOOT, press RESET, release BOOT)
+          4. Run flash script: ./flash.sh /dev/ttyUSB0 (Linux/Mac) or flash.bat COM3 (Windows)
+          
+          For more information, visit:
+          https://github.com/coff33ninja/ESP32-PlatformIO-Project-Template
+          EOF
+
+      - name: Create release archive
+        run: |
+          cd release
+          zip -r ../esp32-firmware-${{ github.event.release.tag_name }}.zip .
+          cd ..
+          tar -czf esp32-firmware-${{ github.event.release.tag_name }}.tar.gz -C release .
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            esp32-firmware-${{ github.event.release.tag_name }}.zip
+            esp32-firmware-${{ github.event.release.tag_name }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Notification
+  notify:
+    name: Notify Status
+    runs-on: ubuntu-latest
+    needs: [lint, build, security, validate]
+    if: always()
+    
+    steps:
+      - name: Notify success
+        if: ${{ needs.lint.result == 'success' && needs.build.result == 'success' && needs.security.result == 'success' && needs.validate.result == 'success' }}
+        run: |
+          echo "[PASS] All checks passed! ESP32 project is ready for deployment."
+          
+      - name: Notify failure
+        if: ${{ needs.lint.result == 'failure' || needs.build.result == 'failure' || needs.security.result == 'failure' || needs.validate.result == 'failure' }}
+        run: |
+          echo "[FAIL] Some checks failed. Please review the logs and fix issues."
+          exit 1

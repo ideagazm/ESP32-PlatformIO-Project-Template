@@ -1,0 +1,220 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Create virtual environment and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Generate changelog from git commits
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          
+          echo "Generating changelog for $VERSION"
+          
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "## Changes" > CHANGELOG.md
+            echo "Initial release" >> CHANGELOG.md
+          else
+            echo "## Changes since $PREV_TAG" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            
+            # Get commits since last tag
+            git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD >> CHANGELOG.md
+          fi
+          
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Build firmware for all environments
+        run: |
+          echo "Building firmware for all environments..."
+          source .venv/bin/activate
+          pio run -e esp32dev
+          pio run -e esp32dev_debug
+          pio run -e esp32dev_ota
+
+      - name: Create release package
+        run: |
+          mkdir -p release-package
+          
+          # Copy firmware files
+          cp .pio/build/esp32dev/firmware.bin release-package/firmware-production.bin
+          cp .pio/build/esp32dev_debug/firmware.bin release-package/firmware-debug.bin
+          cp .pio/build/esp32dev_ota/firmware.bin release-package/firmware-ota.bin
+          
+          # Copy system files
+          cp .pio/build/esp32dev/bootloader.bin release-package/
+          cp .pio/build/esp32dev/partitions.bin release-package/
+          
+          # Create version info
+          cat > release-package/version.json << EOF
+          {
+            "version": "${{ github.ref_name }}",
+            "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "${{ github.sha }}",
+            "environments": {
+              "production": {
+                "file": "firmware-production.bin",
+                "description": "Optimized production build"
+              },
+              "debug": {
+                "file": "firmware-debug.bin", 
+                "description": "Debug build with verbose logging"
+              },
+              "ota": {
+                "file": "firmware-ota.bin",
+                "description": "OTA-enabled build for remote updates"
+              }
+            }
+          }
+          EOF
+          
+          # Create flash instructions
+          cat > release-package/FLASH_INSTRUCTIONS.md << 'EOF'
+          # ESP32 Flashing Instructions
+          
+          ## Prerequisites
+          1. Install esptool: `pip install esptool`
+          2. Connect ESP32 via USB cable
+          3. Install USB drivers if needed
+          
+          ## Flashing Steps
+          
+          ### 1. Put ESP32 in Download Mode
+          - Hold down **BOOT** button (GPIO0)
+          - Press and release **RESET** button (EN)
+          - Release **BOOT** button
+          
+          ### 2. Flash Firmware
+          
+          **Linux/Mac:**
+          ```bash
+          esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 921600 write_flash \
+            0x1000 bootloader.bin \
+            0x8000 partitions.bin \
+            0x10000 firmware-production.bin
+          ```
+          
+          **Windows:**
+          ```cmd
+          esptool.py --chip esp32 --port COM3 --baud 921600 write_flash ^
+            0x1000 bootloader.bin ^
+            0x8000 partitions.bin ^
+            0x10000 firmware-production.bin
+          ```
+          
+          ### 3. Verify Installation
+          - Press **RESET** button to restart ESP32
+          - Open serial monitor at 115200 baud
+          - Should see boot messages and "Hello from ESP32!"
+          
+          ## Firmware Variants
+          - **firmware-production.bin**: Optimized for deployment
+          - **firmware-debug.bin**: Includes debug logging
+          - **firmware-ota.bin**: Supports over-the-air updates
+          
+          ## Troubleshooting
+          - **Connection failed**: Check USB cable and drivers
+          - **Wrong boot mode**: Ensure ESP32 is in download mode
+          - **Permission denied**: Try running as administrator/sudo
+          EOF
+
+      - name: Create archives
+        run: |
+          cd release-package
+          
+          # Create ZIP archive
+          zip -r ../esp32-firmware-${{ github.ref_name }}.zip .
+          
+          # Create TAR.GZ archive  
+          tar -czf ../esp32-firmware-${{ github.ref_name }}.tar.gz .
+          
+          cd ..
+          
+          # Calculate checksums
+          sha256sum esp32-firmware-${{ github.ref_name }}.zip > checksums.txt
+          sha256sum esp32-firmware-${{ github.ref_name }}.tar.gz >> checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ESP32 Firmware ${{ github.ref_name }}
+          body: |
+            # ESP32 Firmware Release ${{ github.ref_name }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## [PKG] Release Assets
+            
+            - **esp32-firmware-${{ github.ref_name }}.zip** - Complete firmware package (ZIP)
+            - **esp32-firmware-${{ github.ref_name }}.tar.gz** - Complete firmware package (TAR.GZ)
+            - **checksums.txt** - SHA256 checksums for verification
+            
+            ## [INFO] Quick Start
+            
+            1. Download the firmware package
+            2. Extract the archive
+            3. Follow instructions in `FLASH_INSTRUCTIONS.md`
+            4. Flash `firmware-production.bin` for normal use
+            
+            ## [TOOL] Firmware Variants
+            
+            - **Production**: Optimized build for deployment
+            - **Debug**: Includes verbose logging for development
+            - **OTA**: Supports over-the-air updates
+            
+            ## [LIST] System Requirements
+            
+            - ESP32 development board
+            - USB cable for programming
+            - Python 3.7+ with esptool installed
+            
+            For detailed documentation, visit the [project repository](https://github.com/coff33ninja/ESP32-PlatformIO-Project-Template).
+          files: |
+            esp32-firmware-${{ github.ref_name }}.zip
+            esp32-firmware-${{ github.ref_name }}.tar.gz
+            checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

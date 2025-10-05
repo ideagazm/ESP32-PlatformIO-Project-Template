@@ -1,5 +1,70 @@
+# PlatformIO
 .pio
 .vscode/.browse.c_cpp.db*
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Logs
+logs/*.log
+*.log
+
+# Backups
+backups/
+*.bak
+*.backup
+
+# Temporary files
+*.tmp
+*.temp
+requirements.in
+requirements.txt.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Security
+*.key
+*.pem
+*.p12
+config/secrets.json
+
+# Build artifacts
+firmware.bin
+firmware.elf
+bootloader.bin
+partitions.bin

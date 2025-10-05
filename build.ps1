@@ -28,6 +28,7 @@ function Show-Help {
     Write-Host "  flash-info - Get chip and flash information"
     Write-Host "  logs       - Show recent log files"
     Write-Host "  status     - Check project health and status"
+    Write-Host "  validate-workflows - Validate GitHub Actions workflows"
     Write-Host ""
     Write-Host "Setup:" -ForegroundColor Yellow
     Write-Host "  setup      - Run development environment setup"
@@ -127,6 +128,10 @@ switch ($Command.ToLower()) {
     "status" {
         Write-Host "📊 Checking project status..." -ForegroundColor Green
         Invoke-PythonScript "scripts/project_status.py" @()
+    }
+    "validate-workflows" {
+        Write-Host "🔍 Validating GitHub workflows..." -ForegroundColor Green
+        Invoke-PythonScript "scripts/validate_workflows.py" @()
     }
     "size" {
         Write-Host "📊 Analyzing build size..." -ForegroundColor Green

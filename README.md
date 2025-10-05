@@ -133,6 +133,13 @@ Build specific environment: `pio run -e esp32dev_debug`
 - 📦 **Library Management**: Automated dependency handling
 - 🎯 **Multi-Target Support**: Debug, production, and OTA builds
 
+### CI/CD & Automation
+- ⚡ **GitHub Actions**: Automated build, test, and release workflows
+- 🔍 **Pull Request Validation**: Automated code quality and build checks
+- 📦 **Automated Releases**: Binary artifacts with flash instructions
+- 🔄 **Dependency Updates**: Weekly automated dependency management
+- 🛡️ **Security Scanning**: Automated vulnerability detection
+
 ## 📚 Need Help?
 
 - Check `scripts/setup.py` for environment setup
@@ -217,3 +224,69 @@ The tools create several directories and files:
 - Check `logs/` directory for error details
 - Use `.\build.ps1 help` for command reference
 - Verify setup with `.\build.ps1 setup`
+## 🔄 Gi
+tHub Workflows
+
+This project includes comprehensive GitHub Actions workflows for automated development processes:
+
+### Continuous Integration (`ci.yml`)
+- **Code Quality**: Automated linting and formatting checks
+- **Multi-Environment Builds**: Builds for production, debug, and OTA
+- **Security Scanning**: Vulnerability detection with Trivy
+- **Project Validation**: Health checks and documentation validation
+- **Automated Releases**: Binary artifacts with installation instructions
+
+### Pull Request Validation (`pr-validation.yml`)
+- **Format Validation**: Ensures PR titles follow conventional commits
+- **Code Quality Checks**: Python formatting and linting
+- **Build Verification**: Confirms all environments compile successfully
+- **Documentation Checks**: Validates markdown and documentation updates
+- **Security Scanning**: Checks for security issues in changes
+
+### Release Management (`release.yml`)
+- **Automated Releases**: Creates releases with firmware binaries
+- **Multi-Format Archives**: ZIP and TAR.GZ packages
+- **Flash Instructions**: Includes detailed flashing guides
+- **Changelog Generation**: Automatic changelog from git commits
+- **Checksum Verification**: SHA256 checksums for integrity
+
+### Dependency Management (`dependency-update.yml`)
+- **Weekly Updates**: Automated PlatformIO and Python dependency updates
+- **Security Audits**: Regular vulnerability scanning
+- **Automated PRs**: Creates pull requests for dependency updates
+- **Compatibility Testing**: Verifies updates don't break functionality
+
+### Issue Templates
+- **Bug Reports**: Structured bug reporting with environment details
+- **Feature Requests**: Comprehensive feature request template
+- **Pull Request Template**: Detailed PR checklist and guidelines
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](.github/CONTRIBUTING.md) for details on:
+
+- Development setup and guidelines
+- Code style and formatting requirements
+- Testing procedures and requirements
+- Pull request process and review criteria
+- Community guidelines and code of conduct
+
+### Quick Contribution Steps
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes and test thoroughly
+4. Commit using conventional commits: `git commit -m "feat: add amazing feature"`
+5. Push to your fork: `git push origin feature/amazing-feature`
+6. Open a Pull Request with detailed description
+
+## 📊 Project Status
+
+[![CI/CD Pipeline](https://github.com/coff33ninja/ESP32-PlatformIO-Project-Template/actions/workflows/ci.yml/badge.svg)](https://github.com/coff33ninja/ESP32-PlatformIO-Project-Template/actions/workflows/ci.yml)
+[![Release](https://github.com/coff33ninja/ESP32-PlatformIO-Project-Template/actions/workflows/release.yml/badge.svg)](https://github.com/coff33ninja/ESP32-PlatformIO-Project-Template/actions/workflows/release.yml)
+[![Dependency Updates](https://github.com/coff33ninja/ESP32-PlatformIO-Project-Template/actions/workflows/dependency-update.yml/badge.svg)](https://github.com/coff33ninja/ESP32-PlatformIO-Project-Template/actions/workflows/dependency-update.yml)
+
+- **Build Status**: All environments compile successfully
+- **Code Quality**: Automated linting and formatting checks
+- **Security**: Regular vulnerability scanning
+- **Dependencies**: Weekly automated updates
+- **Documentation**: Comprehensive guides and examples
