@@ -1,0 +1,63 @@
+{
+  "name": "ESP32 PlatformIO Template",
+  "version": "1.0.0",
+  "description": "Complete PlatformIO development environment for ESP32 projects",
+  "author": "Developer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "hardware": {
+    "platform": "ESP32",
+    "board": "esp32dev",
+    "interfaces": {
+      "gpio": true,
+      "serial": true,
+      "wifi": true,
+      "bluetooth": true
+    }
+  },
+  "features": {
+    "build_system": {
+      "environments": ["production", "debug", "ota"],
+      "automation": true,
+      "cross_platform": true
+    },
+    "development": {
+      "vscode_integration": true,
+      "debugging": true,
+      "serial_monitor": true
+    },
+    "deployment": {
+      "usb_upload": true,
+      "ota_updates": true,
+      "ci_cd": true
+    }
+  },
+  "development": {
+    "environments": {
+      "production": "esp32dev",
+      "debug": "esp32dev_debug",
+      "ota": "esp32dev_ota"
+    },
+    "tools": {
+      "build_system": "PlatformIO",
+      "ide": "VS Code",
+      "debugger": "esp-prog",
+      "monitor": "Serial"
+    }
+  },
+  "dependencies": {
+    "libraries": ["Example libraries configured (easily customizable)"],
+    "frameworks": ["Arduino"],
+    "tools": ["PlatformIO", "ESP32 Toolchain"]
+  },
+  "scripts": {
+    "build": "pio run",
+    "upload": "pio run --target upload",
+    "monitor": "pio device monitor",
+    "deploy": "python scripts/dev.py deploy",
+    "setup": "python scripts/setup.py"
+  }
+}
