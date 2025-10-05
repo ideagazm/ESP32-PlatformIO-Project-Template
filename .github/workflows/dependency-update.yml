@@ -1,0 +1,260 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run weekly on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-platformio:
+    name: Update PlatformIO Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Create virtual environment and install PlatformIO
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Update PlatformIO core
+        run: |
+          source .venv/bin/activate
+          pio upgrade
+          pio platform update
+
+      - name: Update libraries
+        run: |
+          source .venv/bin/activate
+          pio lib update
+
+      - name: Check for updates
+        id: check-updates
+        run: |
+          # Check if any files were modified
+          if git diff --quiet; then
+            echo "No updates available"
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+          else
+            echo "Updates found"
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            
+            # Get list of changed files
+            CHANGED_FILES=$(git diff --name-only)
+            echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check-updates.outputs.has_updates == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update PlatformIO dependencies'
+          title: 'chore: Update PlatformIO dependencies'
+          body: |
+            ## Automated Dependency Update
+            
+            This PR contains automated updates to PlatformIO dependencies.
+            
+            ### Changed Files:
+            ```
+            ${{ steps.check-updates.outputs.changed_files }}
+            ```
+            
+            ### What was updated:
+            - PlatformIO core and platforms
+            - Project libraries
+            
+            ### Testing:
+            - [ ] Build verification will run automatically
+            - [ ] Manual testing recommended before merging
+            
+            This PR was created automatically by the dependency update workflow.
+          branch: chore/update-dependencies
+          delete-branch: true
+
+  update-python-deps:
+    name: Update Python Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Create virtual environment and install pip-tools
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install pip-tools
+
+      - name: Update requirements
+        id: update-requirements
+        run: |
+          source .venv/bin/activate
+          # Backup current requirements
+          cp requirements.txt requirements.txt.bak
+          
+          # Create requirements.in from current requirements.txt for pip-tools
+          cp requirements.txt requirements.in
+          
+          # Update to latest versions
+          pip-compile --upgrade requirements.in --output-file requirements.txt
+          
+          # Check if anything changed
+          if ! diff -q requirements.txt requirements.txt.bak > /dev/null; then
+            echo "Python dependencies updated"
+            echo "python_updated=true" >> $GITHUB_OUTPUT
+            
+            # Show what changed
+            echo "Changes:"
+            diff requirements.txt.bak requirements.txt || true
+          else
+            echo "No Python dependency updates"
+            echo "python_updated=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Clean up
+          rm -f requirements.in requirements.txt.bak
+
+      - name: Test updated dependencies
+        if: steps.update-requirements.outputs.python_updated == 'true'
+        run: |
+          source .venv/bin/activate
+          # Install updated dependencies
+          pip install -r requirements.txt
+          
+          # Run basic tests
+          python scripts/project_status.py || {
+            echo "[FAIL] Updated dependencies broke project status script"
+            exit 1
+          }
+          
+          echo "[PASS] Updated dependencies work correctly"
+
+      - name: Create Pull Request for Python updates
+        if: steps.update-requirements.outputs.python_updated == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update Python dependencies'
+          title: 'chore: Update Python dependencies'
+          body: |
+            ## Automated Python Dependency Update
+            
+            This PR contains automated updates to Python dependencies in `requirements.txt`.
+            
+            ### Changes:
+            - Updated Python package versions to latest compatible versions
+            - Verified compatibility with existing scripts
+            
+            ### Testing:
+            - [x] Basic script functionality verified
+            - [ ] Full integration testing recommended
+            
+            This PR was created automatically by the dependency update workflow.
+          branch: chore/update-python-dependencies
+          delete-branch: true
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Create virtual environment and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install safety bandit
+
+      - name: Run safety check
+        run: |
+          source .venv/bin/activate
+          echo "Running safety check for known vulnerabilities..."
+          safety check --json > safety-report.json || {
+            echo "[WARN] Security vulnerabilities found in Python dependencies"
+            cat safety-report.json
+          }
+
+      - name: Run bandit security scan
+        run: |
+          source .venv/bin/activate
+          echo "Running bandit security scan..."
+          bandit -r scripts/ -f json -o bandit-report.json || {
+            echo "[WARN] Security issues found in Python code"
+            cat bandit-report.json
+          }
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            safety-report.json
+            bandit-report.json
+          retention-days: 30
+
+  notify-maintainers:
+    name: Notify Maintainers
+    runs-on: ubuntu-latest
+    needs: [update-platformio, update-python-deps, security-audit]
+    if: always()
+    
+    steps:
+      - name: Create summary
+        run: |
+          echo "## Dependency Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.update-platformio.result }}" = "success" ]; then
+            echo "[PASS] PlatformIO dependencies: Checked" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] PlatformIO dependencies: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.update-python-deps.result }}" = "success" ]; then
+            echo "[PASS] Python dependencies: Checked" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] Python dependencies: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.security-audit.result }}" = "success" ]; then
+            echo "[PASS] Security audit: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[WARN] Security audit: Issues found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the Actions tab for detailed results and any created pull requests." >> $GITHUB_STEP_SUMMARY

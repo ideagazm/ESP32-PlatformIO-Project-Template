@@ -1,0 +1,317 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  # Skip if draft PR
+  check-draft:
+    name: Check if Draft PR
+    runs-on: ubuntu-latest
+    outputs:
+      is_draft: ${{ steps.check.outputs.is_draft }}
+    steps:
+      - name: Check if PR is draft
+        id: check
+        run: |
+          if [ "${{ github.event.pull_request.draft }}" = "true" ]; then
+            echo "is_draft=true" >> $GITHUB_OUTPUT
+            echo "[WARN] This is a draft PR - skipping validation"
+          else
+            echo "is_draft=false" >> $GITHUB_OUTPUT
+            echo "[PASS] This is a ready PR - running validation"
+          fi
+
+  # Validate PR title and description
+  validate-pr:
+    name: Validate PR Format
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is_draft == 'false'
+    
+    steps:
+      - name: Validate PR title
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          
+          # Check if title follows conventional commits format
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|test|chore|ci|perf|build)(\(.+\))?: .+ ]]; then
+            echo "[FAIL] PR title must follow conventional commits format:"
+            echo "   feat: add new feature"
+            echo "   fix: bug fix"
+            echo "   docs: documentation changes"
+            echo "   style: formatting changes"
+            echo "   refactor: code refactoring"
+            echo "   test: adding tests"
+            echo "   chore: maintenance tasks"
+            echo "   ci: CI/CD changes"
+            echo "   perf: performance improvements"
+            echo "   build: build system changes"
+            echo ""
+            echo "Current title: $PR_TITLE"
+            exit 1
+          fi
+          
+          echo "[PASS] PR title follows conventional commits format"
+
+      - name: Check PR description
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+          
+          if [ -z "$PR_BODY" ] || [ "$PR_BODY" = "null" ]; then
+            echo "[FAIL] PR description is required"
+            exit 1
+          fi
+          
+          # Check minimum length
+          if [ ${#PR_BODY} -lt 20 ]; then
+            echo "[FAIL] PR description too short (minimum 20 characters)"
+            exit 1
+          fi
+          
+          echo "[PASS] PR description is adequate"
+
+  # Code quality checks
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is_draft == 'false'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Create virtual environment and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black
+
+      - name: Check Python code formatting
+        run: |
+          source .venv/bin/activate
+          echo "Checking Python code formatting..."
+          black --check --diff scripts/ || {
+            echo "[FAIL] Python code is not properly formatted"
+            echo "Run 'black scripts/' to fix formatting"
+            exit 1
+          }
+          echo "[PASS] Python code formatting is correct"
+
+      - name: Run Python linting
+        run: |
+          source .venv/bin/activate
+          echo "Running Python linting..."
+          flake8 scripts/ --max-line-length=100 --ignore=E203,W503 || {
+            echo "[FAIL] Python linting failed"
+            exit 1
+          }
+          echo "[PASS] Python linting passed"
+
+      - name: Check PlatformIO configuration
+        run: |
+          source .venv/bin/activate
+          echo "Validating PlatformIO configuration..."
+          pio project config --json-output > /dev/null || {
+            echo "[FAIL] PlatformIO configuration is invalid"
+            exit 1
+          }
+          echo "[PASS] PlatformIO configuration is valid"
+
+  # Build verification
+  build-check:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is_draft == 'false'
+    
+    strategy:
+      matrix:
+        environment: [esp32dev, esp32dev_debug]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+
+      - name: Create virtual environment and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build firmware (${{ matrix.environment }})
+        run: |
+          source .venv/bin/activate
+          echo "Building firmware for ${{ matrix.environment }}..."
+          pio run -e ${{ matrix.environment }} || {
+            echo "[FAIL] Build failed for ${{ matrix.environment }}"
+            exit 1
+          }
+          echo "[PASS] Build successful for ${{ matrix.environment }}"
+
+      - name: Check build size
+        run: |
+          FIRMWARE_SIZE=$(stat -c%s .pio/build/${{ matrix.environment }}/firmware.bin)
+          MAX_SIZE=1310720  # 1.25MB limit for ESP32
+          
+          echo "Firmware size: $FIRMWARE_SIZE bytes"
+          echo "Maximum size: $MAX_SIZE bytes"
+          
+          if [ $FIRMWARE_SIZE -gt $MAX_SIZE ]; then
+            echo "[FAIL] Firmware size exceeds limit!"
+            exit 1
+          fi
+          
+          echo "[PASS] Firmware size is within limits"
+
+  # Documentation checks
+  docs-check:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is_draft == 'false'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check README updates
+        run: |
+          # Check if README was modified in this PR
+          git fetch origin main
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+          
+          # If code files changed, README should be updated too
+          if echo "$CHANGED_FILES" | grep -E '\.(cpp|h|py|ini)$' > /dev/null; then
+            if ! echo "$CHANGED_FILES" | grep -q "README.md"; then
+              echo "[WARN] Code files were modified but README.md was not updated"
+              echo "Consider updating documentation if needed"
+            else
+              echo "[PASS] README.md was updated along with code changes"
+            fi
+          fi
+
+      - name: Validate markdown files
+        run: |
+          # Check for broken markdown syntax
+          for file in $(find . -name "*.md" -not -path "./.git/*"); do
+            echo "Checking $file..."
+            
+            # Basic markdown validation
+            if grep -q "]()" "$file"; then
+              echo "[FAIL] Found empty links in $file"
+              exit 1
+            fi
+            
+            # Check for proper heading structure
+            if grep -q "^#\{7,\}" "$file"; then
+              echo "[FAIL] Heading levels too deep in $file (max 6 levels)"
+              exit 1
+            fi
+          done
+          
+          echo "[PASS] Markdown files are valid"
+
+  # Security scan
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is_draft == 'false'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
+  # Final validation summary
+  validation-summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [check-draft, validate-pr, code-quality, build-check, docs-check, security-scan]
+    if: always() && needs.check-draft.outputs.is_draft == 'false'
+    
+    steps:
+      - name: Check all validations
+        run: |
+          echo "## PR Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check each job result
+          if [ "${{ needs.validate-pr.result }}" = "success" ]; then
+            echo "[PASS] PR Format: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] PR Format: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.code-quality.result }}" = "success" ]; then
+            echo "[PASS] Code Quality: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] Code Quality: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.build-check.result }}" = "success" ]; then
+            echo "[PASS] Build Check: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] Build Check: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.docs-check.result }}" = "success" ]; then
+            echo "[PASS] Documentation: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] Documentation: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.security-scan.result }}" = "success" ]; then
+            echo "[PASS] Security Scan: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] Security Scan: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Overall result
+          if [ "${{ needs.validate-pr.result }}" = "success" ] && \
+             [ "${{ needs.code-quality.result }}" = "success" ] && \
+             [ "${{ needs.build-check.result }}" = "success" ] && \
+             [ "${{ needs.docs-check.result }}" = "success" ] && \
+             [ "${{ needs.security-scan.result }}" = "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "[SUCCESS] **All validations passed!** This PR is ready for review." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "[WARN] **Some validations failed.** Please fix the issues before merging." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi

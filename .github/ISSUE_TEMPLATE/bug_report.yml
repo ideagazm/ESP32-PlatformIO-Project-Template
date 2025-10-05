@@ -1,0 +1,123 @@
+name: 🐛 Bug Report
+description: Report a bug or issue with the ESP32 project template
+title: "[BUG] "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the information below to help us diagnose and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened and what you expected to happen...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Run command '...'
+        2. See error '...'
+        3. Expected '...' but got '...'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component is affected?
+      options:
+        - Build System (build.ps1, PlatformIO)
+        - WiFi Configuration (scripts/wifi_config.py)
+        - Serial Monitor (scripts/monitor.py)
+        - Flash Tools (scripts/flash_tool.py)
+        - OTA Updates (scripts/ota_update.py)
+        - Project Status (scripts/project_status.py)
+        - Documentation
+        - CI/CD Workflows
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: What environment are you using?
+      options:
+        - Windows 10
+        - Windows 11
+        - Linux (Ubuntu)
+        - Linux (Other)
+        - macOS
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: esp32-board
+    attributes:
+      label: ESP32 Board
+      description: What ESP32 board are you using?
+      placeholder: "e.g., ESP32 DevKit V1, ESP32-WROOM-32, NodeMCU-32S"
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Version Information
+      description: Please provide version information
+      placeholder: |
+        - PlatformIO Core: (run `pio --version`)
+        - Python: (run `python --version`)
+        - ESP32 Platform: (check platformio.ini)
+        - Project Template Version: (git commit hash or release tag)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: Please paste any relevant error messages or logs
+      render: shell
+      placeholder: Paste error messages, stack traces, or log output here...
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Relevant configuration files (platformio.ini, etc.)
+      render: ini
+      placeholder: Paste relevant configuration sections here...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please confirm you have done the following
+      options:
+        - label: I have searched existing issues to make sure this is not a duplicate
+          required: true
+        - label: I have provided all the requested information
+          required: true
+        - label: I have tested with the latest version of the template
+          required: false
+        - label: I have checked the documentation and troubleshooting guides
+          required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or information about the problem here.
+      placeholder: Any additional information that might help...

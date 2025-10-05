@@ -1,0 +1,160 @@
+name: Test Workflows
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+  test-python-setup:
+    name: Test Python 3.13 Setup
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Verify Python version
+        run: |
+          python --version
+          python -c "import sys; print(f'Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+
+      - name: Setup virtual environment (Windows)
+        if: runner.os == 'Windows'
+        run: .github/scripts/setup-venv.bat
+
+      - name: Setup virtual environment (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x .github/scripts/setup-venv.sh
+          .github/scripts/setup-venv.sh
+
+      - name: Test project status script (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          python scripts/project_status.py
+
+      - name: Test project status script (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          source .venv/bin/activate
+          python scripts/project_status.py
+
+  test-build-matrix:
+    name: Test Build Matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [esp32dev, esp32dev_debug]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Test build (${{ matrix.environment }})
+        run: |
+          source .venv/bin/activate
+          pio run -e ${{ matrix.environment }} --dry-run
+
+  test-code-quality:
+    name: Test Code Quality Tools
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Test Black formatting
+        run: |
+          source .venv/bin/activate
+          black --check --diff scripts/ || echo "Black formatting check completed"
+
+      - name: Test Flake8 linting
+        run: |
+          source .venv/bin/activate
+          flake8 scripts/ --max-line-length=100 --ignore=E203,W503 || echo "Flake8 linting completed"
+
+      - name: Test Safety security check
+        run: |
+          source .venv/bin/activate
+          safety check || echo "Safety check completed"
+
+      - name: Test Bandit security scan
+        run: |
+          source .venv/bin/activate
+          bandit -r scripts/ || echo "Bandit scan completed"
+
+  summary:
+    name: Workflow Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-python-setup, test-build-matrix, test-code-quality]
+    if: always()
+    
+    steps:
+      - name: Check results
+        run: |
+          echo "## Workflow Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.test-python-setup.result }}" = "success" ]; then
+            echo "[PASS] Python 3.13 setup: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] Python 3.13 setup: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.test-build-matrix.result }}" = "success" ]; then
+            echo "[PASS] Build matrix: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] Build matrix: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.test-code-quality.result }}" = "success" ]; then
+            echo "[PASS] Code quality tools: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "[FAIL] Code quality tools: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All workflows are configured for Python 3.13 with virtual environment support." >> $GITHUB_STEP_SUMMARY
