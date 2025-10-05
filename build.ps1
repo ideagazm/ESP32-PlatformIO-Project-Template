@@ -19,6 +19,15 @@ function Show-Help {
     Write-Host "  ota        - Upload via OTA (Over-The-Air)"
     Write-Host "  uploadfs   - Upload SPIFFS filesystem"
     Write-Host "  devices    - List connected devices"
+    Write-Host "  size       - Analyze build size and memory usage"
+    Write-Host ""
+    Write-Host "Tools:" -ForegroundColor Yellow
+    Write-Host "  wifi       - Generate WiFi configuration"
+    Write-Host "  monitor-enhanced - Enhanced serial monitor with logging"
+    Write-Host "  backup     - Create flash memory backup"
+    Write-Host "  flash-info - Get chip and flash information"
+    Write-Host "  logs       - Show recent log files"
+    Write-Host "  status     - Check project health and status"
     Write-Host ""
     Write-Host "Setup:" -ForegroundColor Yellow
     Write-Host "  setup      - Run development environment setup"
@@ -87,7 +96,42 @@ switch ($Command.ToLower()) {
     }
     "check" { Invoke-PioCommand @("check") }
     "update" { Invoke-PioCommand @("lib", "update") }
-    "info" { Invoke-PioCommand @("project", "data") }
+    "info" { Invoke-PioCommand @("project", "config") }
+    "wifi" { 
+        Write-Host "🌐 Generating WiFi configuration..." -ForegroundColor Green
+        Invoke-PythonScript "scripts/wifi_config.py" @()
+    }
+    "monitor-enhanced" {
+        Write-Host "🔍 Starting enhanced serial monitor..." -ForegroundColor Green
+        Invoke-PythonScript "scripts/monitor.py" @("-p", "COM3", "-l", "logs/serial.log")
+    }
+    "backup" {
+        Write-Host "💾 Creating flash backup..." -ForegroundColor Green
+        Invoke-PythonScript "scripts/flash_tool.py" @("backup")
+    }
+    "flash-info" {
+        Write-Host "ℹ️ Getting flash information..." -ForegroundColor Green
+        Invoke-PythonScript "scripts/flash_tool.py" @("chip-info")
+        Invoke-PythonScript "scripts/flash_tool.py" @("flash-info")
+    }
+    "logs" {
+        $logsDir = "logs"
+        if (Test-Path $logsDir) {
+            Write-Host "📋 Recent log files:" -ForegroundColor Green
+            Get-ChildItem $logsDir -File | Sort-Object LastWriteTime -Descending | Select-Object -First 5 | Format-Table Name, Length, LastWriteTime
+        }
+        else {
+            Write-Host "📁 No logs directory found" -ForegroundColor Yellow
+        }
+    }
+    "status" {
+        Write-Host "📊 Checking project status..." -ForegroundColor Green
+        Invoke-PythonScript "scripts/project_status.py" @()
+    }
+    "size" {
+        Write-Host "📊 Analyzing build size..." -ForegroundColor Green
+        Invoke-PioCommand @("run", "--target", "size")
+    }
     default {
         Write-Host "❌ Unknown command: $Command" -ForegroundColor Red
         Write-Host "Use '.\build.ps1 help' to see available commands" -ForegroundColor Yellow

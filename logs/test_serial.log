@@ -1,0 +1,8 @@
+[01:15:23.456] ESP32 Boot Complete
+[01:15:23.500] WiFi connecting to PAIMON...
+[01:15:25.123] WiFi connected! IP: 192.168.1.100
+[01:15:25.200] Starting web server on port 80
+[01:15:25.250] OTA update server ready
+[01:15:26.000] Hello from ESP32!
+[01:15:27.000] Hello from ESP32!
+[01:15:28.000] Hello from ESP32!
