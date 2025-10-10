@@ -17,6 +17,7 @@ A complete PlatformIO development environment setup for ESP32 projects with prof
 ├── src/                    # Your source code (.cpp, .ino, .h files)
 ├── lib/                    # Custom libraries (optional)
 ├── data/                   # SPIFFS/LittleFS data files
+├── config/                 # ESPHome device configurations (.yaml files)
 ├── scripts/                # Development automation scripts
 ├── .vscode/                # VS Code integration
 ├── platformio.ini          # PlatformIO configuration
@@ -77,7 +78,40 @@ python scripts/monitor.py            # Enhanced serial monitor
 python scripts/flash_tool.py         # Flash management
 python scripts/ota_update.py         # OTA update manager
 python scripts/project_status.py     # Project health check
+python scripts/esphome_dashboard.py  # Launch ESPHome dashboard
 ```
+
+### ESPHome Integration
+```powershell
+.\build.ps1 esphome        # Launch ESPHome dashboard
+python scripts/esphome_dashboard.py  # Alternative launcher
+```
+
+## 🏠 ESPHome Integration
+
+This project now includes full ESPHome support for Home Assistant integration and web-based device management.
+
+### Quick ESPHome Setup
+1. **First Run**: `.\build.ps1 esphome` - Automatic setup dialog will appear
+2. **Configure**: Enter WiFi credentials and passwords in the GUI
+3. **Access Web Interface**: Open `http://localhost:6052` in your browser
+4. **Create Device Config**: Use the web interface or edit YAML files in `config/`
+
+### ESPHome Features
+- 🌐 **Web Dashboard**: Browser-based device management
+- 📝 **YAML Configuration**: Simple, declarative device setup
+- 🏠 **Home Assistant Integration**: Native HA discovery and control
+- 📡 **OTA Updates**: Wireless firmware updates
+- 📊 **Real-time Logs**: Live device monitoring
+- 🔧 **Visual Editor**: Web-based configuration editor
+
+### Configuration Files
+- `config/README.md`: Detailed ESPHome setup instructions
+
+### ESPHome vs PlatformIO
+- **ESPHome**: High-level, YAML-based, Home Assistant focused
+- **PlatformIO**: Low-level C++, full control, custom applications
+- **Both Supported**: Choose the right tool for your project needs
 
 ## 🔧 Build Environments
 

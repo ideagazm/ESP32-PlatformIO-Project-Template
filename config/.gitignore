@@ -1,0 +1,42 @@
+# ESPHome Sensitive Configuration Files
+# These files contain passwords, API keys, and other sensitive data
+
+# Main secrets file
+*.yaml
+*.yml
+
+# Any file with "secrets" in the name
+*secrets*
+*.secrets.*
+
+# Private configuration files
+private*
+*.private.*
+
+# Backup files that might contain sensitive data
+*.bak
+*.backup
+*.orig
+
+# Temporary files
+*.tmp
+*.temp
+
+# Device-specific files with credentials (if following naming convention)
+*_credentials.*
+*_auth.*
+*_keys.*
+
+# ESPHOME CONFIG
+.esphome*
+esphome/
+esphome.yaml
+esphome.yml
+
+
+# Allow example and template files
+!example_*
+!template_*
+!*_example.*
+!*_template.*
+!README.md

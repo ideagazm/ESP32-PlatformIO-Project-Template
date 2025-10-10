@@ -28,6 +28,7 @@ function Show-Help {
     Write-Host "  flash-info - Get chip and flash information"
     Write-Host "  logs       - Show recent log files"
     Write-Host "  status     - Check project health and status"
+    Write-Host "  esphome    - Launch ESPHome dashboard"
     Write-Host "  validate-workflows - Validate GitHub Actions workflows"
     Write-Host ""
     Write-Host "Setup:" -ForegroundColor Yellow
@@ -132,6 +133,11 @@ switch ($Command.ToLower()) {
     "validate-workflows" {
         Write-Host "🔍 Validating GitHub workflows..." -ForegroundColor Green
         Invoke-PythonScript "scripts/validate_workflows.py" @()
+    }
+    "esphome" {
+        Write-Host "🏠 Launching ESPHome dashboard..." -ForegroundColor Green
+        Write-Host "Dashboard will be available at: http://localhost:6052" -ForegroundColor Cyan
+        Invoke-PythonScript "scripts/esphome_dashboard.py" @()
     }
     "size" {
         Write-Host "📊 Analyzing build size..." -ForegroundColor Green
